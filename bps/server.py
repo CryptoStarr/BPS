@@ -20,6 +20,8 @@ Bound to 127.0.0.1 — never exposes the dashboard outside the machine.
 from __future__ import annotations
 
 import json
+import platform
+import socket
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -31,7 +33,7 @@ from . import APP_LONG_NAME, APP_NAME, __version__, history
 from .analyzer import analyze
 from .geoip import asn_lookup, enrich, is_private
 from .report import _render_hop_svg
-from .tracer import Tracer, hop_deltas
+from .tracer import Tracer, TraceResult, hop_deltas
 
 
 # ---------- shared state ----------
@@ -83,44 +85,106 @@ def _update_live_hop(host: str, ttl: int, **fields) -> None:
         live.sort(key=lambda h: h["ttl"])
 
 
-def _async_enrich_ip(host: str, ttl: int, ip: str) -> None:
-    """Look up rDNS + ASN for an IP and patch the matching live_hops entry."""
-    if not ip:
-        return
-    if is_private(ip):
-        _update_live_hop(host, ttl, asn_name="Local network")
-        return
-    asn, name = asn_lookup(ip)
-    if asn or name:
-        _update_live_hop(host, ttl, asn=asn, asn_name=name)
-
-
 def _run_trace_job(host: str) -> None:
-    """Execute a 3-pass trace + enrichment, then render the live SVG.
+    """Execute a 3-pass trace + enrichment with progressive rendering.
 
-    Streams partial hop data into ``_state[host]['live_hops']`` as each TTL
-    is discovered, so the dashboard can render an interactive log without
-    waiting for all 3 passes to complete (~12-15 s).
+    Streams partial hop data into ``_state[host]['live_hops']`` AND re-renders
+    the path SVG every time a hop is discovered or its AS info resolves —
+    so the dashboard's path picture builds up live alongside the hop table
+    rather than appearing only when the trace completes.
     """
-    _set_state(host, status="running", started_at=time.time(),
+    started = time.time()
+    _set_state(host, status="running", started_at=started,
                error=None, trace=None, svg=None, analysis=None,
                live_hops=[])
 
+    # Resolve the destination up-front so partial SVGs always have a real
+    # endpoint to draw on the right-hand side.
+    try:
+        dst_ip = socket.gethostbyname(host)
+    except socket.gaierror:
+        dst_ip = host
+
+    method = ("system_tracert" if platform.system() == "Windows"
+              else "system_traceroute")
+
+    # Server-side merged hops, parallel to the tracer's internal merge dict.
+    # We need our own copy so we can render a TraceResult on demand without
+    # waiting for ``trace_full`` to return.
+    merged: dict[int, "object"] = {}
+    merge_lock = threading.Lock()
     enrich_pool = ThreadPoolExecutor(max_workers=4)
 
+    def _re_render_partial() -> None:
+        """Build a partial SVG from whatever hops we've seen so far."""
+        with merge_lock:
+            hops = [merged[t] for t in sorted(merged)]
+        if not hops:
+            return
+        try:
+            partial_trace = TraceResult(
+                destination=host,
+                destination_ip=dst_ip,
+                port=443,
+                started_at=started,
+                finished_at=time.time(),
+                hops=hops,
+                method=method,
+            )
+            partial_analysis = analyze(partial_trace)
+            deltas = hop_deltas(partial_trace.hops)
+            partial_svg = _render_hop_svg(partial_trace, partial_analysis, deltas)
+            _set_state(host, svg=partial_svg)
+        except Exception:
+            # Best-effort: a partial trace can be malformed in odd ways; we'd
+            # rather drop a frame than crash the trace job.
+            pass
+
+    def _async_enrich(ttl: int, ip: str, hop_ref) -> None:
+        """Resolve rDNS + ASN, mutate the merged Hop in place, then re-render
+        so AS clusters appear on the path picture as info arrives."""
+        if not ip:
+            return
+        if is_private(ip):
+            hop_ref.asn_name = "Local network"
+            _update_live_hop(host, ttl, asn_name="Local network")
+            _re_render_partial()
+            return
+        asn, name = asn_lookup(ip)
+        if asn or name:
+            hop_ref.asn = asn
+            hop_ref.asn_name = name
+            _update_live_hop(host, ttl, asn=asn, asn_name=name)
+            _re_render_partial()
+
     def on_hop(pass_idx: int, hop) -> None:
-        # Per-hop streaming: surface IP / RTT / loss the moment a hop arrives,
-        # then kick off an async AS lookup that backfills the same entry.
-        rtt = round(hop.min_rtt, 1) if hop.min_rtt is not None else None
+        # Server-side merge: dedupe on TTL; later passes feed extra probes
+        # and ECMP IPs into the same Hop instance.
+        with merge_lock:
+            if hop.ttl not in merged:
+                merged[hop.ttl] = hop
+                if hop.ip and hop.ip not in hop.all_ips:
+                    hop.all_ips.append(hop.ip)
+                merged_hop = hop
+            else:
+                existing = merged[hop.ttl]
+                existing.probes.extend(hop.probes)
+                if hop.ip and hop.ip not in existing.all_ips:
+                    existing.all_ips.append(hop.ip)
+                merged_hop = existing
+
+        rtt = round(merged_hop.min_rtt, 1) if merged_hop.min_rtt is not None else None
         _update_live_hop(
-            host, hop.ttl,
-            ip=hop.ip,
+            host, merged_hop.ttl,
+            ip=merged_hop.ip,
             min_rtt=rtt,
-            loss_pct=round(hop.loss_pct, 1),
-            all_ips=list(hop.all_ips or []) or None,
+            loss_pct=round(merged_hop.loss_pct, 1),
+            all_ips=list(merged_hop.all_ips or []) or None,
         )
-        if hop.ip:
-            enrich_pool.submit(_async_enrich_ip, host, hop.ttl, hop.ip)
+        if merged_hop.ip:
+            enrich_pool.submit(_async_enrich, merged_hop.ttl,
+                               merged_hop.ip, merged_hop)
+        _re_render_partial()
 
     try:
         tracer = Tracer(max_hops=30, probes_per_hop=3, timeout_s=2.0,
