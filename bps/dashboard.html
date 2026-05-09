@@ -149,6 +149,22 @@
   }
   .live-card .pending { color: var(--muted); font-style: italic; font-size: 11px; }
 
+  /* RTT / LOSS health badges. Same palette as the verdict pills so the
+     colour at a glance matches the analyzer's overall severity model. */
+  .health {
+    display: inline-block;
+    min-width: 56px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    text-align: center;
+    font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  }
+  .health.ok   { background: #e6f4ea; color: var(--ok); }
+  .health.warn { background: #fef3e1; color: var(--warn); }
+  .health.bad  { background: #fbe5e5; color: var(--bad); }
+
   /* Tooltip */
   #tooltip {
     position: fixed;
@@ -371,17 +387,43 @@
       const network = h.asn_name
         ? `${escapeHtml(h.asn_name)}${h.asn ? ' <span class="pending">' + escapeHtml(h.asn) + '</span>' : ''}`
         : (h.ip ? '<span class="pending">resolving…</span>' : '');
-      const rtt = h.min_rtt != null ? `${h.min_rtt} ms` : '—';
-      const loss = (h.loss_pct != null) ? `${h.loss_pct}%` : '—';
+      const rtt = renderRttPill(h.min_rtt);
+      const loss = renderLossPill(h.loss_pct);
       const cls = changed.has(h.ttl) ? 'fresh' : '';
       return `<tr class="${cls}">
         <td class="mono">${h.ttl}</td>
         <td class="mono">${ipText}${ecmp}</td>
         <td>${network}</td>
-        <td class="mono">${rtt}</td>
-        <td class="mono">${loss}</td>
+        <td>${rtt}</td>
+        <td>${loss}</td>
       </tr>`;
     }).join('');
+  }
+
+  // Health thresholds picked to match the analyzer's policy:
+  //   loss <1% = healthy, <15% = mild, >=15% = real loss
+  //   rtt <50 ms = good, <150 ms = transit-typical, >=150 ms = high
+  function lossSeverity(loss) {
+    if (loss == null) return null;
+    if (loss < 1)   return 'ok';
+    if (loss < 15)  return 'warn';
+    return 'bad';
+  }
+  function rttSeverity(ms) {
+    if (ms == null) return null;
+    if (ms < 50)    return 'ok';
+    if (ms < 150)   return 'warn';
+    return 'bad';
+  }
+  function renderLossPill(loss) {
+    if (loss == null) return '<span class="pending">—</span>';
+    const sev = lossSeverity(loss);
+    return `<span class="health ${sev}">${loss}%</span>`;
+  }
+  function renderRttPill(ms) {
+    if (ms == null) return '<span class="pending">—</span>';
+    const sev = rttSeverity(ms);
+    return `<span class="health ${sev}">${ms} ms</span>`;
   }
 
   function escapeHtml(s) {
