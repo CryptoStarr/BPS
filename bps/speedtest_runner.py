@@ -9,8 +9,28 @@ look fine even when a specific destination is slow.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import os
+import sys
 import time
+from dataclasses import dataclass
+
+
+def _ensure_stdio() -> None:
+    """speedtest-cli prints to stderr and calls ``sys.stderr.fileno()`` for
+    progress output. Under pythonw.exe / PyInstaller --windowed those streams
+    are ``None``, which raises ``'NoneType' has no attribute 'fileno'``. The
+    fix is to point the stream at the OS null device so it has a real fd.
+    The main entry point already does this; doing it again here is a cheap
+    safeguard for callers (e.g. tests) that bypass __main__."""
+    try:
+        if sys.stdin is None:
+            sys.stdin = open(os.devnull, "r")
+        if sys.stdout is None:
+            sys.stdout = open(os.devnull, "w")
+        if sys.stderr is None:
+            sys.stderr = open(os.devnull, "w")
+    except OSError:
+        pass
 
 
 @dataclass
@@ -42,6 +62,7 @@ class SpeedtestResult:
 
 def run_speedtest() -> SpeedtestResult:
     started = time.time()
+    _ensure_stdio()
     try:
         import speedtest  # type: ignore
     except ImportError:
