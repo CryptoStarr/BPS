@@ -77,10 +77,19 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
 <title>BPS report — {html.escape(trace.destination)}</title>
 <style>
   :root {{
-    --bg: #fafaf7;
+    /* Match the live dashboard: dark slate frame, light card surfaces.
+       The print-media block at the bottom flips the frame back to white
+       so PDFs / printouts stay legible (and don't waste ink on big dark
+       backgrounds when an ISP forwards the report internally). */
+    --bg: #16202d;
+    --header-bg: #0f1623;
+    --surface: #ffffff;
     --ink: #1a1a1a;
+    --on-dark: #e6e8eb;
+    --on-dark-muted: #8b95a3;
     --muted: #6b6b6b;
     --line: #e8e6df;
+    --line-on-dark: #2a3445;
     --ok: #2f9e44;
     --warn: #f08c00;
     --bad: #c92a2a;
@@ -90,7 +99,7 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
   body {{
     font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Hoefler Text', Georgia, serif;
     background: var(--bg);
-    color: var(--ink);
+    color: var(--on-dark);
     margin: 0;
     padding: 0;
     line-height: 1.55;
@@ -104,7 +113,7 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 2px solid var(--ink);
+    border-bottom: 1px solid var(--line-on-dark);
     padding-bottom: 20px;
     margin-bottom: 32px;
     gap: 24px;
@@ -125,11 +134,13 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
     font-size: 28px;
     letter-spacing: -0.02em;
     margin: 0;
+    color: var(--on-dark);
   }}
+  header h1 .muted-on-dark {{ color: var(--on-dark-muted); font-weight: 300; }}
   header .meta {{
     font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
     font-size: 11px;
-    color: var(--muted);
+    color: var(--on-dark-muted);
     text-align: right;
     letter-spacing: 0.04em;
   }}
@@ -169,16 +180,25 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
     font-weight: 700;
     letter-spacing: 0.15em;
     text-transform: uppercase;
-    color: var(--muted);
-    border-bottom: 1px solid var(--line);
+    color: var(--on-dark-muted);
+    border-bottom: 1px solid var(--line-on-dark);
     padding-bottom: 8px;
     margin: 0 0 20px;
   }}
   .path-svg-wrap {{
     overflow-x: auto;
-    background: white;
+    background: var(--surface);
     border: 1px solid var(--line);
+    border-radius: 6px;
     padding: 20px;
+  }}
+  /* Hop table sits on its own white card so the rows read on the dark frame. */
+  .table-card {{
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 4px;
+    color: var(--ink);
   }}
   table {{
     width: 100%;
@@ -264,14 +284,22 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
   footer {{
     margin-top: 64px;
     padding-top: 20px;
-    border-top: 1px solid var(--line);
+    border-top: 1px solid var(--line-on-dark);
     font-size: 11px;
-    color: var(--muted);
+    color: var(--on-dark-muted);
     text-align: center;
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   }}
+  /* When the ISP prints or PDFs this report, flip the frame to white so
+     dark backgrounds don't waste ink and the document stays legible on
+     paper. Cards stay the same; only the page chrome changes. */
   @media print {{
-    body {{ background: white; }}
+    body {{ background: white; color: var(--ink); }}
+    header h1, header h1 .muted-on-dark, header .meta,
+    section h2, footer {{ color: var(--muted); }}
+    header h1 {{ color: var(--ink); }}
+    header {{ border-bottom-color: var(--ink); }}
+    section h2, footer {{ border-color: var(--line); }}
     .container {{ padding: 24px; }}
     section {{ break-inside: avoid; }}
   }}
@@ -282,7 +310,7 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
   <header>
     <div class="brand">
       {logo_html}
-      <h1>BPS <span style="font-weight:300; color:var(--muted);">/ BurikaPathScope · network path report</span></h1>
+      <h1>BPS <span class="muted-on-dark">/ BurikaPathScope · network path report</span></h1>
     </div>
     <div class="meta">
       DESTINATION  {html.escape(trace.destination)}<br>
@@ -309,7 +337,7 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
 
   <section>
     <h2>Hop-by-hop detail</h2>
-    {table}
+    <div class="table-card">{table}</div>
   </section>
 
   <footer>
