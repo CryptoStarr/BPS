@@ -48,6 +48,22 @@ hops = [
 hops[5].all_ips = ["100.124.1.2", "100.124.3.2"]
 hops[10].all_ips = ["51.255.0.1", "51.255.4.7"]
 
+# Mock geolocation data so the map renders in the offline test report.
+GEO_BY_TTL = {
+    5:  {"lat": -33.92, "lon": 18.42, "city": "Cape Town",   "country": "South Africa"},
+    6:  {"lat": -33.92, "lon": 18.42, "city": "Cape Town",   "country": "South Africa"},
+    7:  {"lat": -26.20, "lon": 28.04, "city": "Johannesburg","country": "South Africa"},
+    8:  {"lat": -8.84,  "lon": 13.23, "city": "Luanda",      "country": "Angola"},
+    9:  {"lat": -8.84,  "lon": 13.23, "city": "Luanda",      "country": "Angola"},
+    10: {"lat":  38.72, "lon":-9.14,  "city": "Lisbon",      "country": "Portugal"},
+    11: {"lat":  48.85, "lon": 2.35,  "city": "Paris",       "country": "France"},
+    12: {"lat":  50.69, "lon": 3.21,  "city": "Roubaix",     "country": "France"},
+    13: {"lat":  50.69, "lon": 3.21,  "city": "Roubaix",     "country": "France"},
+}
+for h in hops:
+    if h.ttl in GEO_BY_TTL:
+        h.geo = GEO_BY_TTL[h.ttl]
+
 trace = TraceResult(
     destination="eu320e.odoo.com",
     destination_ip="57.128.117.70",

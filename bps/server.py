@@ -31,7 +31,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from . import APP_LONG_NAME, APP_NAME, __version__, history
 from .analyzer import analyze
-from .geoip import asn_lookup, enrich, is_private, netbios_name, reverse_dns
+from .geoip import asn_lookup, enrich, geo_locate, is_private, netbios_name, reverse_dns
 from .report import _render_hop_svg
 from .tracer import Tracer, TraceResult, agent_hostname, hop_deltas, local_ip_for
 
@@ -148,9 +148,9 @@ def _run_trace_job(host: str) -> None:
             pass
 
     def _async_enrich(ttl: int, ip: str, hop_ref) -> None:
-        """Resolve rDNS / NetBIOS / ASN, mutate the merged Hop in place,
-        then re-render so cluster names appear on the live path picture
-        as soon as they're known."""
+        """Resolve rDNS / NetBIOS / ASN / geo, mutate the merged Hop in place,
+        then re-render so cluster names + map markers appear on the live
+        view as soon as they're known."""
         if not ip:
             return
         if is_private(ip):
@@ -166,6 +166,12 @@ def _run_trace_job(host: str) -> None:
             hop_ref.asn = asn
             hop_ref.asn_name = name
             _update_live_hop(host, ttl, asn=asn, asn_name=name)
+            _re_render_partial()
+        # Geolocate (separate try; failure shouldn't block AS info).
+        geo = geo_locate(ip)
+        if geo:
+            hop_ref.geo = geo
+            _update_live_hop(host, ttl, geo=geo)
             _re_render_partial()
 
     def on_hop(pass_idx: int, hop) -> None:

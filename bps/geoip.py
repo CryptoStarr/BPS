@@ -43,6 +43,9 @@ _rdns_cache: dict[str, str | None] = {}
 _asn_cache: dict[str, tuple[str | None, str | None]] = {}
 # Cache for PeeringDB long names keyed by ASN string ("AS20011" or "20011").
 _peeringdb_cache: dict[str, str | None] = {}
+# Cache for ip-api.com geolocation results keyed by IP. Value is a small
+# dict with lat/lon/city/country_code, or None when the lookup failed.
+_geo_cache: dict[str, dict | None] = {}
 _lock = threading.Lock()
 
 # Team Cymru's DNS WHOIS is hosted under cymru.com but the queries we send
@@ -171,6 +174,83 @@ def peeringdb_long_name(asn_or_num: str, timeout: float = 3.0) -> str | None:
     return name
 
 
+def geo_locate_batch(ips: list[str], timeout: float = 5.0) -> dict[str, dict | None]:
+    """Resolve a batch of IPs to geo coordinates via ip-api.com's free /batch
+    endpoint (no API key required, up to 100 IPs per request).
+
+    Returns a dict keyed by IP. Each value is either a small dict with
+    ``lat``, ``lon``, ``city``, ``country``, ``country_code``, ``isp``,
+    ``org`` — or ``None`` for IPs that didn't resolve. Cached so repeated
+    traces of the same path are instant.
+
+    Public IPs only; private IPs are skipped (no point — they'd map to
+    nowhere, and ip-api flags them as ``status=fail``).
+    """
+    if not HAS_REQUESTS or not ips:
+        return {}
+
+    todo: list[str] = []
+    out: dict[str, dict | None] = {}
+    with _lock:
+        for ip in ips:
+            if ip in _geo_cache:
+                out[ip] = _geo_cache[ip]
+            elif is_private(ip):
+                _geo_cache[ip] = None
+                out[ip] = None
+            else:
+                todo.append(ip)
+
+    if not todo:
+        return out
+
+    fields = "status,country,countryCode,city,lat,lon,isp,org,as,query"
+    try:
+        r = requests.post(
+            "http://ip-api.com/batch",
+            params={"fields": fields},
+            json=[{"query": ip} for ip in todo],
+            timeout=timeout,
+            headers={"User-Agent": "BPS-BurikaPathScope/1.0"},
+        )
+        if r.status_code == 200:
+            for entry in r.json():
+                ip = entry.get("query")
+                if not ip:
+                    continue
+                if entry.get("status") == "success":
+                    out[ip] = {
+                        "lat": entry.get("lat"),
+                        "lon": entry.get("lon"),
+                        "city": entry.get("city") or "",
+                        "country": entry.get("country") or "",
+                        "country_code": entry.get("countryCode") or "",
+                        "isp": entry.get("isp") or "",
+                        "org": entry.get("org") or "",
+                    }
+                else:
+                    out[ip] = None
+                with _lock:
+                    _geo_cache[ip] = out[ip]
+        else:
+            for ip in todo:
+                out[ip] = None
+                with _lock:
+                    _geo_cache[ip] = None
+    except Exception:
+        for ip in todo:
+            out[ip] = None
+            with _lock:
+                _geo_cache[ip] = None
+
+    return out
+
+
+def geo_locate(ip: str, timeout: float = 4.0) -> dict | None:
+    """Single-IP wrapper around :func:`geo_locate_batch`."""
+    return geo_locate_batch([ip], timeout=timeout).get(ip)
+
+
 def asn_lookup(ip: str, timeout: float = 2.0) -> tuple[str | None, str | None]:
     """
     Returns (asn, asn_name) e.g. ("AS37468", "Angola Cables Networks SA").
@@ -284,3 +364,12 @@ def enrich(hops, max_workers: int = 8) -> None:
     if private_hops:
         with ThreadPoolExecutor(max_workers=min(max_workers, len(private_hops))) as pool:
             list(pool.map(_identify_private, private_hops))
+
+    # Geolocate every public IP in a single batched call (ip-api.com /batch
+    # accepts up to 100 IPs per request, so any realistic trace fits).
+    public_ips = [h.ip for h in hops if h.ip and not is_private(h.ip)]
+    if public_ips:
+        geo = geo_locate_batch(public_ips)
+        for h in hops:
+            if h.ip and h.ip in geo:
+                h.geo = geo[h.ip]

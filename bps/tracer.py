@@ -63,6 +63,9 @@ class Hop:
     # Per-extra-IP enrichment (the primary IP's enrichment lives on the hop
     # itself). Map: ip -> (hostname, asn, asn_name).
     extra_ip_info: dict[str, tuple[str | None, str | None, str | None]] = field(default_factory=dict)
+    # Geolocation: {lat, lon, city, country, country_code, isp, org} or None.
+    # Populated during enrichment and used by the dashboard/report's map view.
+    geo: dict | None = None
 
     @property
     def avg_rtt(self) -> float | None:
