@@ -5,10 +5,17 @@
 <title>BPS — live network path</title>
 <style>
   :root {
-    --bg: #fafaf7;
-    --ink: #1a1a1a;
-    --muted: #6b6b6b;
-    --line: #e8e6df;
+    /* Dark slate dashboard frame; cards stay light so the server-rendered
+       SVG (white fills, dark strokes) remains crisp without a re-theme. */
+    --bg: #16202d;
+    --header-bg: #0f1623;
+    --surface: #ffffff;
+    --ink: #1a1a1a;          /* text inside light cards */
+    --on-dark: #e6e8eb;      /* text on dark frame */
+    --on-dark-muted: #8b95a3;
+    --muted: #6b6b6b;        /* muted inside cards */
+    --line: #e8e6df;         /* internal card borders */
+    --line-on-dark: #2a3445;
     --ok: #2f9e44;
     --warn: #f08c00;
     --bad: #c92a2a;
@@ -24,34 +31,39 @@
   header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 20px 32px;
-    border-bottom: 2px solid var(--ink);
-    background: white;
+    border-bottom: 1px solid var(--line-on-dark);
+    background: var(--header-bg);
+    color: var(--on-dark);
     position: sticky; top: 0; z-index: 50;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.4);
   }
-  header h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
-  header h1 .muted { color: var(--muted); font-weight: 300; }
+  header h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; color: var(--on-dark); }
+  header h1 .muted { color: var(--on-dark-muted); font-weight: 300; }
   .controls { display: flex; gap: 12px; align-items: center; }
   .controls input[type="text"] {
     font: inherit;
     padding: 8px 12px;
-    border: 1px solid var(--line);
+    border: 1px solid var(--line-on-dark);
     border-radius: 4px;
     width: 280px;
-    background: white;
+    background: #1c2738;
+    color: var(--on-dark);
   }
+  .controls input[type="text"]::placeholder { color: var(--on-dark-muted); }
   .controls button {
     font: inherit;
     padding: 8px 16px;
-    border: 1px solid var(--ink);
+    border: 1px solid var(--on-dark);
     border-radius: 4px;
-    background: var(--ink);
-    color: white;
+    background: var(--on-dark);
+    color: var(--header-bg);
     cursor: pointer;
     font-weight: 600;
   }
+  .controls button:hover { filter: brightness(0.95); }
   .controls button[disabled] { opacity: 0.4; cursor: not-allowed; }
-  .controls button.secondary { background: white; color: var(--ink); }
-  .live-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .controls button.secondary { background: transparent; color: var(--on-dark); }
+  .live-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--on-dark-muted); }
   .live-toggle input { transform: scale(1.2); }
   main { padding: 24px 32px 80px; max-width: 1400px; margin: 0 auto; }
   .verdict-bar {
@@ -179,13 +191,13 @@
   .pill.warn { background: #fef3e1; color: var(--warn); }
   .pill.bad { background: #fbe5e5; color: var(--bad); }
 
-  /* Status pulse */
+  /* Status pulse — sits inside the dark header, so colors are tuned for that. */
   .status {
     display: inline-flex; align-items: center; gap: 8px;
-    font-size: 12px; color: var(--muted);
+    font-size: 12px; color: var(--on-dark-muted);
   }
   .status .dot {
-    width: 8px; height: 8px; border-radius: 50%; background: var(--muted);
+    width: 8px; height: 8px; border-radius: 50%; background: var(--on-dark-muted);
   }
   .status.running .dot { background: var(--warn); animation: pulse 1.2s ease-in-out infinite; }
   .status.done .dot    { background: var(--ok); }
@@ -200,7 +212,7 @@
 
 <header>
   <h1>BPS <span class="muted">/ live network path</span>
-    <span class="muted" id="version-tag" style="font-size:11px; letter-spacing:0.05em; margin-left:8px;"></span>
+    <span id="version-tag" style="color: var(--on-dark-muted); font-size:11px; letter-spacing:0.05em; margin-left:8px; font-weight:400;"></span>
   </h1>
   <div class="controls">
     <input type="text" id="host-input" placeholder="destination (e.g. google.com)" />
