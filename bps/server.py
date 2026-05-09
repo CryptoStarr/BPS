@@ -31,9 +31,9 @@ from urllib.parse import parse_qs, urlsplit
 
 from . import APP_LONG_NAME, APP_NAME, __version__, history
 from .analyzer import analyze
-from .geoip import asn_lookup, enrich, is_private
+from .geoip import asn_lookup, enrich, is_private, netbios_name, reverse_dns
 from .report import _render_hop_svg
-from .tracer import Tracer, TraceResult, hop_deltas
+from .tracer import Tracer, TraceResult, agent_hostname, hop_deltas, local_ip_for
 
 
 # ---------- shared state ----------
@@ -105,6 +105,11 @@ def _run_trace_job(host: str) -> None:
     except socket.gaierror:
         dst_ip = host
 
+    # Capture agent identity once so every partial render labels the source
+    # node consistently with the final report.
+    source_name = agent_hostname()
+    source_ip = local_ip_for(dst_ip)
+
     method = ("system_tracert" if platform.system() == "Windows"
               else "system_traceroute")
 
@@ -130,6 +135,8 @@ def _run_trace_job(host: str) -> None:
                 finished_at=time.time(),
                 hops=hops,
                 method=method,
+                source_name=source_name,
+                source_ip=source_ip,
             )
             partial_analysis = analyze(partial_trace)
             deltas = hop_deltas(partial_trace.hops)
@@ -141,13 +148,17 @@ def _run_trace_job(host: str) -> None:
             pass
 
     def _async_enrich(ttl: int, ip: str, hop_ref) -> None:
-        """Resolve rDNS + ASN, mutate the merged Hop in place, then re-render
-        so AS clusters appear on the path picture as info arrives."""
+        """Resolve rDNS / NetBIOS / ASN, mutate the merged Hop in place,
+        then re-render so cluster names appear on the live path picture
+        as soon as they're known."""
         if not ip:
             return
         if is_private(ip):
-            hop_ref.asn_name = "Local network"
-            _update_live_hop(host, ttl, asn_name="Local network")
+            host_name = reverse_dns(ip) or netbios_name(ip)
+            label = host_name or "Local network"
+            hop_ref.hostname = host_name
+            hop_ref.asn_name = label
+            _update_live_hop(host, ttl, asn_name=label)
             _re_render_partial()
             return
         asn, name = asn_lookup(ip)

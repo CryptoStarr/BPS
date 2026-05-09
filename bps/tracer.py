@@ -104,6 +104,10 @@ class TraceResult:
     finished_at: float
     hops: list[Hop]
     method: str  # "tcp_raw", "system_traceroute", "system_tracert"
+    # Identity of the machine running the trace — surfaces in the report's
+    # leftmost (source) node so reports auto-document who ran them.
+    source_name: str | None = None  # socket.gethostname()
+    source_ip: str | None = None    # local IP used to reach the destination
 
     def to_dict(self) -> dict:
         return {
@@ -114,6 +118,8 @@ class TraceResult:
             "finished_at": self.finished_at,
             "duration_s": self.finished_at - self.started_at,
             "method": self.method,
+            "source_name": self.source_name,
+            "source_ip": self.source_ip,
             "hops": [h.to_dict() for h in self.hops],
         }
 
@@ -170,6 +176,11 @@ class Tracer:
         except socket.gaierror as e:
             raise RuntimeError(f"Cannot resolve {host!r}: {e}") from e
 
+        # Identify the agent (this machine). Used as the label of the leftmost
+        # node so reports auto-document who ran them.
+        source_name = agent_hostname()
+        source_ip = local_ip_for(dst_ip)
+
         method = "tcp_raw" if self._can_use_raw_icmp() else (
             "system_tracert" if platform.system() == "Windows" else "system_traceroute"
         )
@@ -223,6 +234,8 @@ class Tracer:
             finished_at=time.time(),
             hops=hops,
             method=method,
+            source_name=source_name,
+            source_ip=source_ip,
         )
 
     # ---------- Backend selection ----------
@@ -487,3 +500,34 @@ def hop_deltas(hops: list[Hop]) -> list[float | None]:
 def median_nonnull(xs: list[float | None]) -> float:
     vals = [x for x in xs if x is not None]
     return median(vals) if vals else 0.0
+
+
+def agent_hostname() -> str:
+    """Return this machine's hostname (e.g. ``DESKTOP-ABC123``).
+
+    Falls back to ``"agent"`` if the OS doesn't expose a hostname for some
+    reason — never raises, since this is only used as a label.
+    """
+    try:
+        return socket.gethostname() or "agent"
+    except OSError:
+        return "agent"
+
+
+def local_ip_for(remote_ip: str) -> str | None:
+    """Determine which local IP this machine would use to reach ``remote_ip``.
+
+    No packet is sent: we open a UDP socket and call ``connect`` (which on
+    every major OS picks a route and binds a local interface) then read the
+    chosen local address back via ``getsockname``. This works without any
+    privilege and gives the right answer even on multi-homed machines.
+    """
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect((remote_ip, 1))
+            return s.getsockname()[0]
+        finally:
+            s.close()
+    except OSError:
+        return None

@@ -500,7 +500,9 @@ def _render_hop_svg(trace: TraceResult, analysis: Analysis, deltas: list[float |
     )
 
     src_x = H_PAD + SPACING // 2
-    parts.append(_node(src_x, V_CENTER, "ok", "▶", label="agent", sub="source"))
+    src_label = trace.source_name or "agent"
+    src_sub = trace.source_ip or "source"
+    parts.append(_node(src_x, V_CENTER, "ok", "▶", label=src_label, sub=src_sub))
 
     prev_x = src_x
     prev_r = NODE_R

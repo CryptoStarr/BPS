@@ -19,7 +19,10 @@ All lookups are cached per-IP and per-ASN for the lifetime of the process.
 from __future__ import annotations
 
 import ipaddress
+import platform
+import re
 import socket
+import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -63,6 +66,43 @@ def is_private(ip: str) -> bool:
         return ipaddress.ip_address(ip).is_private
     except ValueError:
         return False
+
+
+_netbios_cache: dict[str, str | None] = {}
+
+
+def netbios_name(ip: str, timeout: float = 1.5) -> str | None:
+    """Windows-only: NetBIOS name of a host on the local network, or None.
+
+    The output of ``nbtstat -A <ip>`` lists registered names; the unique
+    ``<00>`` entry is the computer name. Most home routers and Windows
+    machines respond, even when rDNS doesn't have a PTR record. Cached so
+    repeated lookups are free.
+    """
+    if platform.system() != "Windows":
+        return None
+    with _lock:
+        if ip in _netbios_cache:
+            return _netbios_cache[ip]
+
+    name: str | None = None
+    try:
+        proc = subprocess.run(
+            ["nbtstat", "-A", ip],
+            capture_output=True, text=True, timeout=timeout,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
+        )
+        for line in proc.stdout.splitlines():
+            m = re.match(r"\s*(\S+)\s+<00>\s+UNIQUE", line)
+            if m and m.group(1).upper() != "MAC":
+                name = m.group(1)
+                break
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+
+    with _lock:
+        _netbios_cache[ip] = name
+    return name
 
 
 def reverse_dns(ip: str, timeout: float = 1.5) -> str | None:
@@ -228,7 +268,19 @@ def enrich(hops, max_workers: int = 8) -> None:
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         list(pool.map(_do, work_ips))
 
-    # Label private hops as "Local network"
-    for h in hops:
-        if h.ip and is_private(h.ip):
-            h.asn_name = "Local network"
+    # Identify private (LAN) hops by name where possible: try rDNS, then
+    # NetBIOS on Windows. Fall back to a generic "Local network" label.
+    private_hops = [h for h in hops if h.ip and is_private(h.ip)]
+
+    def _identify_private(hop):
+        host = reverse_dns(hop.ip)
+        if not host:
+            host = netbios_name(hop.ip)
+        hop.hostname = host
+        # Use the device name as the AS label so it shows on the cluster /
+        # node glyph; keep "Local network" if we couldn't identify it.
+        hop.asn_name = host or "Local network"
+
+    if private_hops:
+        with ThreadPoolExecutor(max_workers=min(max_workers, len(private_hops))) as pool:
+            list(pool.map(_identify_private, private_hops))
