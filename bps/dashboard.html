@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BPS — live network path</title>
+<style>
+  :root {
+    --bg: #fafaf7;
+    --ink: #1a1a1a;
+    --muted: #6b6b6b;
+    --line: #e8e6df;
+    --ok: #2f9e44;
+    --warn: #f08c00;
+    --bad: #c92a2a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    padding: 0;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 32px;
+    border-bottom: 2px solid var(--ink);
+    background: white;
+    position: sticky; top: 0; z-index: 50;
+  }
+  header h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+  header h1 .muted { color: var(--muted); font-weight: 300; }
+  .controls { display: flex; gap: 12px; align-items: center; }
+  .controls input[type="text"] {
+    font: inherit;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    width: 280px;
+    background: white;
+  }
+  .controls button {
+    font: inherit;
+    padding: 8px 16px;
+    border: 1px solid var(--ink);
+    border-radius: 4px;
+    background: var(--ink);
+    color: white;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .controls button[disabled] { opacity: 0.4; cursor: not-allowed; }
+  .controls button.secondary { background: white; color: var(--ink); }
+  .live-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .live-toggle input { transform: scale(1.2); }
+  main { padding: 24px 32px 80px; max-width: 1400px; margin: 0 auto; }
+  .verdict-bar {
+    display: grid; grid-template-columns: auto 1fr auto; gap: 24px; align-items: center;
+    padding: 16px 24px;
+    background: white;
+    border-left: 6px solid var(--muted);
+    margin-bottom: 24px;
+    border-radius: 4px;
+    box-shadow: 0 1px 0 var(--line);
+  }
+  .verdict-bar.ok   { border-left-color: var(--ok); }
+  .verdict-bar.warn { border-left-color: var(--warn); }
+  .verdict-bar.bad  { border-left-color: var(--bad); }
+  .verdict-tag {
+    font-size: 11px; letter-spacing: 0.18em; font-weight: 700; white-space: nowrap;
+    color: var(--muted);
+  }
+  .verdict-bar.ok .verdict-tag   { color: var(--ok); }
+  .verdict-bar.warn .verdict-tag { color: var(--warn); }
+  .verdict-bar.bad .verdict-tag  { color: var(--bad); }
+  .verdict-headline { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .verdict-summary { font-size: 13px; color: var(--muted); margin: 0; }
+  .verdict-meta {
+    font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: right;
+    line-height: 1.5;
+  }
+  .path-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 24px;
+    overflow-x: auto;
+    margin-bottom: 24px;
+  }
+  .path-card svg .bps-hop { cursor: pointer; }
+  .path-card svg .bps-hop:hover circle { filter: brightness(0.95); }
+  .empty {
+    color: var(--muted); text-align: center; padding: 80px 0; font-size: 15px;
+  }
+
+  /* Live hop log */
+  .live-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    margin-bottom: 24px;
+  }
+  .live-card h2 {
+    margin: 0; padding: 14px 20px;
+    font-size: 11px; letter-spacing: 0.18em; font-weight: 700;
+    color: var(--muted); text-transform: uppercase;
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .live-card h2 .count { color: var(--ink); font-weight: 600; letter-spacing: 0; text-transform: none; font-size: 12px; }
+  .live-card table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .live-card thead th {
+    text-align: left;
+    font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .live-card tbody td {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  .live-card tbody tr.fresh { animation: flash-row 0.6s ease-out; }
+  @keyframes flash-row {
+    from { background: #fff8d4; } to { background: transparent; }
+  }
+  .live-card .mono {
+    font-family: 'SF Mono', 'Monaco', 'Menlo', monospace; font-size: 12px;
+  }
+  .live-card .pending { color: var(--muted); font-style: italic; font-size: 11px; }
+
+  /* Tooltip */
+  #tooltip {
+    position: fixed;
+    z-index: 100;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px 16px;
+    min-width: 240px;
+    max-width: 360px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    font-size: 12px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+  #tooltip.visible { opacity: 1; }
+  #tooltip h3 {
+    margin: 0 0 8px; font-size: 13px; font-weight: 700;
+    border-bottom: 1px solid var(--line); padding-bottom: 6px;
+  }
+  #tooltip table { width: 100%; border-collapse: collapse; }
+  #tooltip td {
+    padding: 3px 0; vertical-align: top;
+  }
+  #tooltip td.k { color: var(--muted); padding-right: 16px; white-space: nowrap; }
+  #tooltip td.v { font-family: 'SF Mono', 'Monaco', 'Menlo', monospace; }
+  #tooltip .hop-row {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 4px 0; border-top: 1px solid var(--line);
+  }
+  #tooltip .hop-row:first-of-type { border-top: 0; }
+  #tooltip .hop-row .ttl { color: var(--muted); font-family: monospace; }
+  #tooltip .pill {
+    display: inline-block; padding: 1px 6px; border-radius: 999px;
+    font-size: 9px; letter-spacing: 0.1em; font-weight: 700; text-transform: uppercase;
+    margin-left: 6px;
+  }
+  .pill.ok { background: #e6f4ea; color: var(--ok); }
+  .pill.warn { background: #fef3e1; color: var(--warn); }
+  .pill.bad { background: #fbe5e5; color: var(--bad); }
+
+  /* Status pulse */
+  .status {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--muted);
+  }
+  .status .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--muted);
+  }
+  .status.running .dot { background: var(--warn); animation: pulse 1.2s ease-in-out infinite; }
+  .status.done .dot    { background: var(--ok); }
+  .status.error .dot   { background: var(--bad); }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>BPS <span class="muted">/ live network path</span>
+    <span class="muted" id="version-tag" style="font-size:11px; letter-spacing:0.05em; margin-left:8px;"></span>
+  </h1>
+  <div class="controls">
+    <input type="text" id="host-input" placeholder="destination (e.g. google.com)" />
+    <button id="run-btn">Run trace</button>
+    <label class="live-toggle">
+      <input type="checkbox" id="live-toggle"> Live mode
+    </label>
+    <span id="status" class="status"><span class="dot"></span><span class="label">idle</span></span>
+  </div>
+</header>
+
+<main>
+  <div id="verdict" class="verdict-bar" style="display:none;">
+    <div class="verdict-tag" id="verdict-tag">—</div>
+    <div>
+      <p class="verdict-headline" id="verdict-headline">—</p>
+      <p class="verdict-summary" id="verdict-summary">—</p>
+    </div>
+    <div class="verdict-meta" id="verdict-meta"></div>
+  </div>
+
+  <div class="path-card" id="path-card">
+    <div class="empty" id="empty-msg">
+      Enter a destination above and click <strong>Run trace</strong>.<br>
+      The path will appear here and refresh while Live mode is on.
+    </div>
+  </div>
+
+  <div class="live-card" id="live-card" style="display:none;">
+    <h2>Live hop discovery <span class="count" id="live-count"></span></h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 50px;">Hop</th>
+          <th>IP</th>
+          <th>Network (AS)</th>
+          <th style="width: 90px;">Min RTT</th>
+          <th style="width: 70px;">Loss</th>
+        </tr>
+      </thead>
+      <tbody id="live-tbody"></tbody>
+    </table>
+  </div>
+</main>
+
+<div id="tooltip" role="tooltip"></div>
+
+<script>
+(() => {
+  const hostInput = document.getElementById('host-input');
+  const runBtn = document.getElementById('run-btn');
+  const liveToggle = document.getElementById('live-toggle');
+  const statusEl = document.getElementById('status');
+  const statusLabel = statusEl.querySelector('.label');
+  const verdict = document.getElementById('verdict');
+  const verdictTag = document.getElementById('verdict-tag');
+  const verdictHeadline = document.getElementById('verdict-headline');
+  const verdictSummary = document.getElementById('verdict-summary');
+  const verdictMeta = document.getElementById('verdict-meta');
+  const pathCard = document.getElementById('path-card');
+  const emptyMsg = document.getElementById('empty-msg');
+  const tooltip = document.getElementById('tooltip');
+  const liveCard = document.getElementById('live-card');
+  const liveCount = document.getElementById('live-count');
+  const liveTbody = document.getElementById('live-tbody');
+  const seenLiveKey = new Map(); // ttl -> serialized snapshot for change detection
+
+  const VERDICT_LABEL = { ok: 'PATH OK', warn: 'DEGRADED', bad: 'BOTTLENECK FOUND' };
+  let currentHost = null;
+  let pollHandle = null;
+  let liveHandle = null;
+
+  function setStatus(state, label) {
+    statusEl.className = 'status ' + (state || '');
+    statusLabel.textContent = label || state || 'idle';
+  }
+
+  async function fetchLast(host) {
+    const url = '/api/last' + (host ? '?host=' + encodeURIComponent(host) : '');
+    const r = await fetch(url);
+    return r.json();
+  }
+
+  async function startTrace(host) {
+    const r = await fetch('/api/trace?host=' + encodeURIComponent(host),
+                          { method: 'POST' });
+    return r.json();
+  }
+
+  function render(state) {
+    if (!state || !state.host) {
+      verdict.style.display = 'none';
+      emptyMsg.style.display = 'block';
+      liveCard.style.display = 'none';
+      return;
+    }
+    setStatus(state.status || 'idle', state.status || 'idle');
+    renderLiveHops(state.live_hops || []);
+    if (state.status === 'running' && !state.svg) {
+      // first run for this host: show running placeholder above the live log
+      verdict.style.display = 'none';
+      emptyMsg.style.display = 'block';
+      emptyMsg.innerHTML = 'Tracing <strong>' + escapeHtml(state.host) + '</strong>…<br><small>3 parallel passes for ECMP detection — see live hops below</small>';
+      return;
+    }
+    if (state.svg) {
+      emptyMsg.style.display = 'none';
+      pathCard.innerHTML = state.svg;
+      attachHopHovers();
+    }
+    if (state.analysis) {
+      const a = state.analysis;
+      const t = state.trace || {};
+      verdict.className = 'verdict-bar ' + (a.overall || '');
+      verdict.style.display = 'grid';
+      verdictTag.textContent = VERDICT_LABEL[a.overall] || a.overall;
+      verdictHeadline.textContent = a.headline || '';
+      verdictSummary.textContent = a.summary || '';
+      const finished = state.finished_at
+        ? new Date(state.finished_at * 1000).toLocaleTimeString()
+        : '';
+      verdictMeta.innerHTML = [
+        'DESTINATION ' + escapeHtml(t.destination || ''),
+        'RESOLVED   ' + escapeHtml((t.destination_ip || '') + ':' + (t.port || '')),
+        'METHOD     ' + escapeHtml(t.method || ''),
+        'UPDATED    ' + finished,
+      ].join('<br>');
+    }
+  }
+
+  function renderLiveHops(hops) {
+    if (!hops || hops.length === 0) {
+      liveCard.style.display = 'none';
+      seenLiveKey.clear();
+      liveTbody.innerHTML = '';
+      return;
+    }
+    liveCard.style.display = 'block';
+    liveCount.textContent = hops.length + (hops.length === 1 ? ' hop' : ' hops');
+
+    // Diff against previous render so only new/changed rows flash.
+    // We rebuild the tbody (simple) but mark just-changed rows with .fresh.
+    const changed = new Set();
+    for (const h of hops) {
+      const key = JSON.stringify([h.ip, h.min_rtt, h.loss_pct, h.asn, h.asn_name,
+                                  (h.all_ips || []).join(',')]);
+      if (seenLiveKey.get(h.ttl) !== key) changed.add(h.ttl);
+      seenLiveKey.set(h.ttl, key);
+    }
+
+    liveTbody.innerHTML = hops.map(h => {
+      const ipText = h.ip ? escapeHtml(h.ip) : '<span class="pending">no reply</span>';
+      const ecmp = (h.all_ips && h.all_ips.length > 1)
+        ? `<br><span class="pending">ECMP: ${h.all_ips.map(escapeHtml).join(', ')}</span>`
+        : '';
+      const network = h.asn_name
+        ? `${escapeHtml(h.asn_name)}${h.asn ? ' <span class="pending">' + escapeHtml(h.asn) + '</span>' : ''}`
+        : (h.ip ? '<span class="pending">resolving…</span>' : '');
+      const rtt = h.min_rtt != null ? `${h.min_rtt} ms` : '—';
+      const loss = (h.loss_pct != null) ? `${h.loss_pct}%` : '—';
+      const cls = changed.has(h.ttl) ? 'fresh' : '';
+      return `<tr class="${cls}">
+        <td class="mono">${h.ttl}</td>
+        <td class="mono">${ipText}${ecmp}</td>
+        <td>${network}</td>
+        <td class="mono">${rtt}</td>
+        <td class="mono">${loss}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    })[c]);
+  }
+
+  function attachHopHovers() {
+    const groups = pathCard.querySelectorAll('g.bps-hop');
+    groups.forEach(g => {
+      g.addEventListener('mouseenter', (e) => {
+        try {
+          const meta = JSON.parse(g.dataset.hop);
+          showTooltip(e, meta);
+        } catch (err) { /* ignore */ }
+      });
+      g.addEventListener('mousemove', positionTooltip);
+      g.addEventListener('mouseleave', hideTooltip);
+    });
+  }
+
+  function showTooltip(e, meta) {
+    const sevPill = `<span class="pill ${meta.severity}">${meta.severity}</span>`;
+    const title = meta.is_cluster
+      ? `${escapeHtml(meta.label || 'Unknown')} ${meta.asn ? '· ' + escapeHtml(meta.asn) : ''}`
+      : `Hop ${meta.hops[0].ttl}: ${escapeHtml(meta.hops[0].ip || '*')}`;
+    const rows = meta.hops.map(h => {
+      const owner = h.asn_name
+        ? `${escapeHtml(h.asn_name)}${h.asn ? ' · ' + escapeHtml(h.asn) : ''}`
+        : '';
+      const rtt = h.min_rtt != null ? `${h.min_rtt}/${h.avg_rtt}/${h.max_rtt} ms` : '—';
+      const loss = `${h.loss_pct}%`;
+      return `<div class="hop-row">
+        <div>
+          <span class="ttl">TTL ${h.ttl}</span>
+          <strong> ${escapeHtml(h.ip || '*')}</strong>
+          ${h.hostname ? '<br><span style="color:var(--muted)">' + escapeHtml(h.hostname) + '</span>' : ''}
+          ${owner ? '<br>' + owner : ''}
+          ${(h.all_ips && h.all_ips.length > 1) ? '<br><span style="color:var(--muted)">ECMP: ' + h.all_ips.map(escapeHtml).join(', ') + '</span>' : ''}
+        </div>
+        <div style="text-align:right;font-family:monospace;">
+          ${rtt}<br><span style="color:var(--muted)">loss ${loss}</span>
+        </div>
+      </div>`;
+    }).join('');
+    tooltip.innerHTML = `<h3>${title} ${sevPill}</h3>${rows}`;
+    positionTooltip(e);
+    tooltip.classList.add('visible');
+  }
+
+  function positionTooltip(e) {
+    const pad = 14;
+    let x = e.clientX + pad;
+    let y = e.clientY + pad;
+    const w = tooltip.offsetWidth, h = tooltip.offsetHeight;
+    if (x + w > window.innerWidth - 8)  x = e.clientX - w - pad;
+    if (y + h > window.innerHeight - 8) y = e.clientY - h - pad;
+    tooltip.style.left = x + 'px';
+    tooltip.style.top  = y + 'px';
+  }
+  function hideTooltip() { tooltip.classList.remove('visible'); }
+
+  async function poll() {
+    if (!currentHost) return;
+    try {
+      const data = await fetchLast(currentHost);
+      render(data);
+      if (data.status === 'running') {
+        // Tight poll while running so streaming hop discoveries arrive quickly
+        pollHandle = setTimeout(poll, 600);
+      } else {
+        pollHandle = null;
+      }
+    } catch (err) {
+      setStatus('error', 'fetch failed');
+    }
+  }
+
+  async function trigger(host) {
+    if (!host) return;
+    currentHost = host;
+    setStatus('running', 'starting…');
+    runBtn.disabled = true;
+    try {
+      await startTrace(host);
+      poll();
+    } finally {
+      runBtn.disabled = false;
+    }
+  }
+
+  runBtn.addEventListener('click', () => trigger(hostInput.value.trim()));
+  hostInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') trigger(hostInput.value.trim());
+  });
+
+  liveToggle.addEventListener('change', () => {
+    if (liveHandle) { clearInterval(liveHandle); liveHandle = null; }
+    if (liveToggle.checked && currentHost) {
+      // every 30s — leave room between traces so we don't pile up
+      liveHandle = setInterval(() => trigger(currentHost), 30_000);
+    }
+  });
+
+  // Load app version into the header so we can tell at a glance which
+  // build of BPS is running.
+  fetch('/api/info').then(r => r.json()).then(info => {
+    if (info && info.version) {
+      document.getElementById('version-tag').textContent = 'v' + info.version;
+      document.title = `${info.name} v${info.version} — live network path`;
+    }
+  }).catch(() => {});
+
+  // On load: pull whatever the latest run is, if any (so a freshly opened
+  // dashboard isn't blank when a trace was already kicked off from the tray).
+  fetchLast().then(data => {
+    if (data && data.host) {
+      currentHost = data.host;
+      hostInput.value = data.host;
+      render(data);
+      if (data.status === 'running') poll();
+    }
+  });
+})();
+</script>
+</body>
+</html>

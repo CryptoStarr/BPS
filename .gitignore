@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# PyInstaller — build artefacts and the ~33 MB compiled exe shouldn't be
+# tracked in git. Releases are uploaded separately via `gh release upload`.
+build/
+dist/
+*.spec
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# BPS-specific
+sample_report.html
+reports/
+*.log
