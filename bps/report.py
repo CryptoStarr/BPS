@@ -83,19 +83,23 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <style>
   :root {{
-    /* Match the live dashboard: dark slate frame, light card surfaces.
+    /* Match the live dashboard: Burika brand blue header over a near-black
+       navy content area, with light card surfaces for the data.
        The print-media block at the bottom flips the frame back to white
        so PDFs / printouts stay legible (and don't waste ink on big dark
        backgrounds when an ISP forwards the report internally). */
-    --bg: #16202d;
-    --header-bg: #0f1623;
+    --bg: #0d1421;
+    --header-bg: #1976d2;
+    --header-accent: #1565c0;
     --surface: #ffffff;
     --ink: #1a1a1a;
     --on-dark: #e6e8eb;
     --on-dark-muted: #8b95a3;
+    --on-header: #ffffff;
+    --on-header-muted: rgba(255,255,255,0.78);
     --muted: #6b6b6b;
     --line: #e8e6df;
-    --line-on-dark: #2a3445;
+    --line-on-dark: #1d2a3d;
     --ok: #2f9e44;
     --warn: #f08c00;
     --bad: #c92a2a;
@@ -110,18 +114,27 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
     padding: 0;
     line-height: 1.55;
   }}
+  /* The header strip spans the full viewport width (blue band, like the
+     Burika app), while the content body stays inside ``.container`` so
+     the cards keep their max-width column. */
+  .header-bar {{
+    background: var(--header-bg);
+    color: var(--on-header);
+    border-bottom: 1px solid var(--header-accent);
+    box-shadow: 0 2px 0 rgba(0,0,0,0.25);
+  }}
   .container {{
     max-width: 1100px;
     margin: 0 auto;
-    padding: 48px 56px 80px;
+    padding: 32px 56px 80px;
+  }}
+  .header-bar .container {{
+    padding: 18px 56px;
   }}
   header {{
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid var(--line-on-dark);
-    padding-bottom: 20px;
-    margin-bottom: 32px;
     gap: 24px;
   }}
   header .brand {{
@@ -130,23 +143,23 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
     gap: 16px;
   }}
   header .brand-logo {{
-    width: 56px;
-    height: 56px;
+    width: 48px;
+    height: 48px;
     display: block;
   }}
   header h1 {{
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-weight: 800;
-    font-size: 28px;
+    font-size: 26px;
     letter-spacing: -0.02em;
     margin: 0;
-    color: var(--on-dark);
+    color: var(--on-header);
   }}
-  header h1 .muted-on-dark {{ color: var(--on-dark-muted); font-weight: 300; }}
+  header h1 .muted-on-dark {{ color: var(--on-header-muted); font-weight: 300; }}
   header .meta {{
     font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
     font-size: 11px;
-    color: var(--on-dark-muted);
+    color: var(--on-header-muted);
     text-align: right;
     letter-spacing: 0.04em;
   }}
@@ -311,10 +324,14 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
      paper. Cards stay the same; only the page chrome changes. */
   @media print {{
     body {{ background: white; color: var(--ink); }}
+    .header-bar {{
+      background: white; color: var(--ink);
+      border-bottom: 2px solid var(--ink); box-shadow: none;
+    }}
+    .header-bar .container {{ padding: 16px 24px; }}
     header h1, header h1 .muted-on-dark, header .meta,
     section h2, footer {{ color: var(--muted); }}
     header h1 {{ color: var(--ink); }}
-    header {{ border-bottom-color: var(--ink); }}
     section h2, footer {{ border-color: var(--line); }}
     .container {{ padding: 24px; }}
     section {{ break-inside: avoid; }}
@@ -322,19 +339,23 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
 </style>
 </head>
 <body>
+<div class="header-bar">
+  <div class="container">
+    <header>
+      <div class="brand">
+        {logo_html}
+        <h1>BPS <span class="muted-on-dark">/ BurikaPathScope · network path report</span></h1>
+      </div>
+      <div class="meta">
+        DESTINATION  {html.escape(trace.destination)}<br>
+        RESOLVED     {html.escape(trace.destination_ip)}:{trace.port}<br>
+        RUN AT       {timestamp}<br>
+        METHOD       {html.escape(trace.method)}
+      </div>
+    </header>
+  </div>
+</div>
 <div class="container">
-  <header>
-    <div class="brand">
-      {logo_html}
-      <h1>BPS <span class="muted-on-dark">/ BurikaPathScope · network path report</span></h1>
-    </div>
-    <div class="meta">
-      DESTINATION  {html.escape(trace.destination)}<br>
-      RESOLVED     {html.escape(trace.destination_ip)}:{trace.port}<br>
-      RUN AT       {timestamp}<br>
-      METHOD       {html.escape(trace.method)}
-    </div>
-  </header>
 
   <div class="verdict">
     <div class="verdict-tag">{overall_label}</div>

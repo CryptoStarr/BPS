@@ -12,17 +12,21 @@
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <style>
   :root {
-    /* Dark slate dashboard frame; cards stay light so the server-rendered
-       SVG (white fills, dark strokes) remains crisp without a re-theme. */
-    --bg: #16202d;
-    --header-bg: #0f1623;
+    /* Burika colour scheme: Material-blue header strip over a near-black
+       navy content area. Cards stay light so the server-rendered SVG
+       (white fills, dark strokes) remains crisp without a re-theme. */
+    --bg: #0d1421;
+    --header-bg: #1976d2;
+    --header-accent: #1565c0;
     --surface: #ffffff;
     --ink: #1a1a1a;          /* text inside light cards */
-    --on-dark: #e6e8eb;      /* text on dark frame */
+    --on-dark: #e6e8eb;      /* text on the navy frame */
     --on-dark-muted: #8b95a3;
+    --on-header: #ffffff;    /* text on the blue header strip */
+    --on-header-muted: rgba(255,255,255,0.78);
     --muted: #6b6b6b;        /* muted inside cards */
     --line: #e8e6df;         /* internal card borders */
-    --line-on-dark: #2a3445;
+    --line-on-dark: #1d2a3d;
     --ok: #2f9e44;
     --warn: #f08c00;
     --bad: #c92a2a;
@@ -37,41 +41,47 @@
   }
   header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 20px 32px;
-    border-bottom: 1px solid var(--line-on-dark);
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--header-accent);
     background: var(--header-bg);
-    color: var(--on-dark);
+    color: var(--on-header);
     position: sticky; top: 0; z-index: 50;
-    box-shadow: 0 1px 0 rgba(0,0,0,0.4);
+    box-shadow: 0 2px 0 rgba(0,0,0,0.25);
   }
-  header h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; color: var(--on-dark); }
-  header h1 .muted { color: var(--on-dark-muted); font-weight: 300; }
+  header h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; color: var(--on-header); }
+  header h1 .muted { color: var(--on-header-muted); font-weight: 300; }
   .controls { display: flex; gap: 12px; align-items: center; }
   .controls input[type="text"] {
     font: inherit;
     padding: 8px 12px;
-    border: 1px solid var(--line-on-dark);
+    border: 1px solid rgba(255,255,255,0.35);
     border-radius: 4px;
     width: 280px;
-    background: #1c2738;
-    color: var(--on-dark);
+    background: rgba(255,255,255,0.12);
+    color: var(--on-header);
   }
-  .controls input[type="text"]::placeholder { color: var(--on-dark-muted); }
+  .controls input[type="text"]::placeholder { color: rgba(255,255,255,0.6); }
+  .controls input[type="text"]:focus {
+    outline: none;
+    background: rgba(255,255,255,0.95);
+    color: var(--ink);
+    border-color: var(--on-header);
+  }
   .controls button {
     font: inherit;
     padding: 8px 16px;
-    border: 1px solid var(--on-dark);
+    border: 1px solid var(--on-header);
     border-radius: 4px;
-    background: var(--on-dark);
+    background: var(--on-header);
     color: var(--header-bg);
     cursor: pointer;
     font-weight: 600;
   }
   .controls button:hover { filter: brightness(0.95); }
   .controls button[disabled] { opacity: 0.4; cursor: not-allowed; }
-  .controls button.secondary { background: transparent; color: var(--on-dark); }
-  .live-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--on-dark-muted); }
-  .live-toggle input { transform: scale(1.2); }
+  .controls button.secondary { background: transparent; color: var(--on-header); }
+  .live-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--on-header-muted); }
+  .live-toggle input { transform: scale(1.2); accent-color: var(--on-header); }
   main { padding: 24px 32px 80px; max-width: 1400px; margin: 0 auto; }
   .verdict-bar {
     display: grid; grid-template-columns: auto 1fr auto; gap: 24px; align-items: center;
@@ -233,17 +243,19 @@
   .pill.warn { background: #fef3e1; color: var(--warn); }
   .pill.bad { background: #fbe5e5; color: var(--bad); }
 
-  /* Status pulse — sits inside the dark header, so colors are tuned for that. */
+  /* Status pulse — sits inside the blue header, so colors are tuned for that. */
   .status {
     display: inline-flex; align-items: center; gap: 8px;
-    font-size: 12px; color: var(--on-dark-muted);
+    font-size: 12px; color: var(--on-header-muted);
   }
   .status .dot {
-    width: 8px; height: 8px; border-radius: 50%; background: var(--on-dark-muted);
+    width: 8px; height: 8px; border-radius: 50%;
+    background: rgba(255,255,255,0.55);
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.18);
   }
-  .status.running .dot { background: var(--warn); animation: pulse 1.2s ease-in-out infinite; }
-  .status.done .dot    { background: var(--ok); }
-  .status.error .dot   { background: var(--bad); }
+  .status.running .dot { background: #ffd54f; animation: pulse 1.2s ease-in-out infinite; }
+  .status.done .dot    { background: #69f0ae; }
+  .status.error .dot   { background: #ff8a80; }
   @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.3; }
@@ -254,7 +266,7 @@
 
 <header>
   <h1>BPS <span class="muted">/ live network path</span>
-    <span id="version-tag" style="color: var(--on-dark-muted); font-size:11px; letter-spacing:0.05em; margin-left:8px; font-weight:400;"></span>
+    <span id="version-tag" style="color: var(--on-header-muted); font-size:11px; letter-spacing:0.05em; margin-left:8px; font-weight:400;"></span>
   </h1>
   <div class="controls">
     <input type="text" id="host-input" value="google.com" autofocus placeholder="destination (e.g. google.com)" />
