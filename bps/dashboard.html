@@ -435,7 +435,14 @@
       seenLiveKey.set(h.ttl, key);
     }
 
-    liveTbody.innerHTML = hops.map(h => {
+    // Convert raw per-hop loss readings into "effective" loss: the loss a
+    // real packet would actually experience at that point on the path. If
+    // any downstream hop has lower loss, the higher reading here is an
+    // ICMP-rate-limit artifact (probes that made it past us were just not
+    // replied to by this router). Real loss can never decrease downstream.
+    const effLoss = effectiveLossSeries(hops);
+
+    liveTbody.innerHTML = hops.map((h, i) => {
       const ipText = h.ip ? escapeHtml(h.ip) : '<span class="pending">no reply</span>';
       const ecmp = (h.all_ips && h.all_ips.length > 1)
         ? `<br><span class="pending">ECMP: ${h.all_ips.map(escapeHtml).join(', ')}</span>`
@@ -444,7 +451,7 @@
         ? `${escapeHtml(h.asn_name)}${h.asn ? ' <span class="pending">' + escapeHtml(h.asn) + '</span>' : ''}`
         : (h.ip ? '<span class="pending">resolving…</span>' : '');
       const rtt = renderRttPill(h.min_rtt);
-      const loss = renderLossPill(h.loss_pct);
+      const loss = renderLossPill(effLoss[i], h.loss_pct);
       const cls = changed.has(h.ttl) ? 'fresh' : '';
       return `<tr class="${cls}">
         <td class="mono">${h.ttl}</td>
@@ -454,6 +461,19 @@
         <td>${loss}</td>
       </tr>`;
     }).join('');
+  }
+
+  function effectiveLossSeries(hops) {
+    const out = new Array(hops.length);
+    let runningMin = null;  // min loss across all downstream-or-equal hops
+    for (let i = hops.length - 1; i >= 0; i--) {
+      const v = hops[i] && hops[i].loss_pct;
+      if (v != null) {
+        runningMin = (runningMin == null) ? v : Math.min(runningMin, v);
+      }
+      out[i] = runningMin;
+    }
+    return out;
   }
 
   // ---- Geographic map ----
@@ -533,10 +553,18 @@
     if (ms < 150)   return 'warn';
     return 'bad';
   }
-  function renderLossPill(loss) {
+  function renderLossPill(loss, rawLoss) {
     if (loss == null) return '<span class="pending">—</span>';
     const sev = lossSeverity(loss);
-    return `<span class="health ${sev}">${loss}%</span>`;
+    let pill = `<span class="health ${sev}">${loss}%</span>`;
+    // If the raw per-hop reading was higher than the effective end-to-end
+    // loss, the upstream router was just rate-limiting our ICMP probes —
+    // the path is fine. Show the raw number in parentheses so it isn't
+    // hidden, but the pill colour reflects reality.
+    if (rawLoss != null && rawLoss > loss + 0.1) {
+      pill += ` <span class="pending" title="raw reading; treated as ICMP-rate-limit artifact since downstream is healthier">(${rawLoss}% raw)</span>`;
+    }
+    return pill;
   }
   function renderRttPill(ms) {
     if (ms == null) return '<span class="pending">—</span>';

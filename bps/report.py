@@ -886,9 +886,29 @@ def _node(cx: int, cy: int, severity: str, inner: str, label: str = "", sub: str
     return "".join(parts)
 
 
+def _effective_loss_series(hops) -> list[float]:
+    """For each hop, return the effective loss a real packet would see at
+    that point on the path — never higher than any downstream hop's loss,
+    because packets that arrived downstream had to pass through this hop.
+
+    Higher raw per-hop readings are ICMP-rate-limit artifacts (the router
+    just declined to reply to TTL-exceeded), not actual lost traffic.
+    """
+    n = len(hops)
+    out = [0.0] * n
+    running_min: float | None = None
+    for i in range(n - 1, -1, -1):
+        loss = hops[i].loss_pct
+        if running_min is None or loss < running_min:
+            running_min = loss
+        out[i] = running_min if running_min is not None else loss
+    return out
+
+
 def _render_hop_table(trace: TraceResult, analysis: Analysis, deltas: list[float | None]) -> str:
     rows: list[str] = []
     severity_by_ttl = {v.ttl: v for v in analysis.hop_verdicts}
+    eff_loss = _effective_loss_series(trace.hops)
 
     rows.append("""<thead><tr>
         <th>Hop</th>
@@ -924,7 +944,21 @@ def _render_hop_table(trace: TraceResult, analysis: Analysis, deltas: list[float
         rows.append(f"<td class='mono'>{_fmt_ms(hop.avg_rtt)}</td>")
         rows.append(f"<td class='mono'>{_fmt_ms(hop.max_rtt)}</td>")
         rows.append(f"<td class='mono'>{_fmt_ms(deltas[i])}</td>")
-        rows.append(f"<td class='mono'>{hop.loss_pct:.0f}%</td>")
+        # Display the EFFECTIVE end-to-end loss at this point on the path —
+        # see _effective_loss_series(). When the raw per-hop reading was
+        # higher (because the router rate-limited TTL-exceeded replies),
+        # the raw number is shown in parentheses so the evidence is still
+        # in the report.
+        eff = eff_loss[i]
+        if hop.loss_pct > eff + 0.5:
+            loss_html = (
+                f"{eff:.0f}% "
+                f"<span style='color:var(--muted); font-size:11px;'>"
+                f"({hop.loss_pct:.0f}% raw)</span>"
+            )
+        else:
+            loss_html = f"{hop.loss_pct:.0f}%"
+        rows.append(f"<td class='mono'>{loss_html}</td>")
         pill_label = {"ok": "ok", "warn": "warn", "bad": "bad"}[sev]
         rows.append(f'<td><span class="pill {sev}">{pill_label}</span>')
         if v and v.reason:
