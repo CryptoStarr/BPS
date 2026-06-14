@@ -171,6 +171,7 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
     align-items: center;
     padding: 24px 28px;
     background: var(--surface);
+    color: var(--ink);
     border-left: 6px solid var(--accent);
     margin-bottom: 40px;
     box-shadow: 0 1px 0 rgba(0,0,0,0.25);
@@ -208,6 +209,7 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
   .path-svg-wrap {{
     overflow-x: auto;
     background: var(--surface);
+    color: var(--ink);
     border: 1px solid var(--line);
     border-radius: 6px;
     padding: 20px;
@@ -273,6 +275,7 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
   }}
   .speedtest-cell {{
     background: var(--surface);
+    color: var(--ink);
     padding: 20px 24px;
   }}
   .speedtest-cell .label {{
@@ -296,6 +299,7 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
   }}
   .callout {{
     background: #fffbe6;
+    color: var(--ink);
     border: 1px solid #ffe58f;
     padding: 16px 20px;
     margin-top: 16px;
