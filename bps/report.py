@@ -91,7 +91,8 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
     --bg: #0d1421;
     --header-bg: #1976d2;
     --header-accent: #1565c0;
-    --surface: #ffffff;
+    --surface: #e9ecef;
+    --surface-soft: #f1f3f5;
     --ink: #1a1a1a;
     --on-dark: #e6e8eb;
     --on-dark-muted: #8b95a3;
@@ -169,10 +170,10 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
     gap: 24px;
     align-items: center;
     padding: 24px 28px;
-    background: white;
+    background: var(--surface);
     border-left: 6px solid var(--accent);
     margin-bottom: 40px;
-    box-shadow: 0 1px 0 var(--line);
+    box-shadow: 0 1px 0 rgba(0,0,0,0.25);
   }}
   .verdict-tag {{
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -271,7 +272,7 @@ def _build_html(trace: TraceResult, analysis: Analysis, st: SpeedtestResult | No
     border: 1px solid var(--line);
   }}
   .speedtest-cell {{
-    background: white;
+    background: var(--surface);
     padding: 20px 24px;
   }}
   .speedtest-cell .label {{

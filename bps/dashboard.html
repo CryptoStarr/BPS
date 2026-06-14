@@ -18,7 +18,8 @@
     --bg: #0d1421;
     --header-bg: #1976d2;
     --header-accent: #1565c0;
-    --surface: #ffffff;
+    --surface: #e9ecef;
+    --surface-soft: #f1f3f5;
     --ink: #1a1a1a;          /* text inside light cards */
     --on-dark: #e6e8eb;      /* text on the navy frame */
     --on-dark-muted: #8b95a3;
@@ -86,7 +87,7 @@
   .verdict-bar {
     display: grid; grid-template-columns: auto 1fr auto; gap: 24px; align-items: center;
     padding: 16px 24px;
-    background: white;
+    background: var(--surface);
     border-left: 6px solid var(--muted);
     margin-bottom: 24px;
     border-radius: 4px;
@@ -112,7 +113,7 @@
     line-height: 1.5;
   }
   .path-card {
-    background: white;
+    background: var(--surface);
     border: 1px solid var(--line);
     border-radius: 4px;
     padding: 24px;
@@ -127,7 +128,7 @@
 
   /* Live hop log */
   .live-card {
-    background: white;
+    background: var(--surface);
     border: 1px solid var(--line);
     border-radius: 4px;
     margin-bottom: 24px;
@@ -205,7 +206,7 @@
   #tooltip {
     position: fixed;
     z-index: 100;
-    background: white;
+    background: var(--surface);
     border: 1px solid var(--line);
     border-radius: 6px;
     padding: 12px 16px;
